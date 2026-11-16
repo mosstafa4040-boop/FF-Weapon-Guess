@@ -26,20 +26,22 @@ jobs:
       - name: Install Android SDK
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Extract project ZIP
+      - name: Extract fixed 2.1 source ZIP
         run: |
+          test -f FFWeaponGuess_Fixed_2.1_Source.zip
           mkdir unpacked
-          ZIP_FILE=$(find . -maxdepth 1 -name '*.zip' | head -n 1)
-          unzip -q "$ZIP_FILE" -d unpacked
+          unzip -q FFWeaponGuess_Fixed_2.1_Source.zip -d unpacked
 
       - name: Build APK
         run: |
           PROJECT_DIR=$(find unpacked -name settings.gradle -printf '%h\n' | head -n 1)
+          test -n "$PROJECT_DIR"
           cd "$PROJECT_DIR"
           gradle assembleDebug
 
       - uses: actions/upload-artifact@v4
         with:
-          name: FFWeaponGuess-APK
+          name: FFWeaponGuess-APK-FIXED-2.1
           path: unpacked/**/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
           
