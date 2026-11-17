@@ -1,47 +1,89 @@
 
-name: Build FF Weapon Guess APK
+name: Build and Update FF Weapon Guess
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: ["main"]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Download project
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+      - name: Set up Java
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
 
-      - uses: android-actions/setup-android@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK
+      - name: Install Android platform and build tools
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
 
-      - name: Extract fixed 2.1 source ZIP
-        run: |
-          test -f FFWeaponGuess_Fixed_2.1_Source.zip
-          mkdir unpacked
-          unzip -q FFWeaponGuess_Fixed_2.1_Source.zip -d unpacked
+      - name: Build debug APK
+        run: gradle assembleDebug
 
-      - name: Build APK
-        run: |
-          PROJECT_DIR=$(find unpacked -name settings.gradle -printf '%h\n' | head -n 1)
-          test -n "$PROJECT_DIR"
-          cd "$PROJECT_DIR"
-          gradle assembleDebug
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
         with:
-          name: FFWeaponGuess-APK-FIXED-2.1
-          path: unpacked/**/app/build/outputs/apk/debug/app-debug.apk
+          name: FFWeaponGuess-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-          
+
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download project
+        uses: actions/checkout@v4
+
+      - name: Find ZIP file
+        run: |
+          ZIP_FILE="FFWeaponGuess_3.0_Profile_Source.zip"
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ZIP file not found!"
+            exit 1
+          fi
+          echo "ZIP_FILE=$ZIP_FILE" >> $GITHUB_ENV
+
+      - name: Extract game
+        run: |
+          mkdir extracted dist
+          unzip -q "$ZIP_FILE" -d extracted
+          HTML_FILE=$(find extracted -type f -path "*/app/src/main/assets/index.html" -print -quit)
+          if [ -z "$HTML_FILE" ]; then
+            echo "index.html not found!"
+            exit 1
+          fi
+          cp "$HTML_FILE" dist/index.html
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload website
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Publish website
+        id: deployment
+        uses: actions/deploy-pages@v4
+        
